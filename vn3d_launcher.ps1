@@ -117,7 +117,7 @@ if ($env:VN3D_LAUNCHER_TEST) {
 
 # ---- window ----
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "VN3D - play Ren'Py games in 3D"
+$form.Text = "DeepScreen - games and videos in 3D"
 $form.Size = New-Object System.Drawing.Size(560, 540)
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 11)

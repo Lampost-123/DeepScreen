@@ -1,4 +1,6 @@
-# VN3D: play 2D games in 3D in VR (PSVR2 / SteamVR)
+# DeepScreen: play 2D games and videos in 3D in VR (PSVR2 / SteamVR)
+
+(Formerly "VN3D"; file names like `vn3d_vr.ps1` keep the old name for now.)
 
 iw3 (in `D:\nunif`) turns the game window into side-by-side 3D with a depth model.
 The Godot viewer shows it as a big screen in SteamVR, and `input_bridge.py` turns the
