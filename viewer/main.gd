@@ -116,6 +116,10 @@ var _wheel_cooldown := 0.0
 var _resizing := false
 var _stat_time := 0.0
 var _stat_frames := 0
+var _stat_renders := 0
+var _stat_slow := 0  # rendered frames that took over 1.5x the headset's frame time (SteamVR then reprojects)
+var _stat_upload_us := 0
+var _stat_upload_max_us := 0
 var _profiles := ["", ""]
 
 var _thread: Thread
@@ -878,14 +882,29 @@ func _poll_frame() -> void:
 	var img := _latest
 	_latest = null
 	_mutex.unlock()
-	_stat_time += get_process_delta_time()
+	var dt := get_process_delta_time()
+	_stat_time += dt
+	_stat_renders += 1
+	var hz := 0.0
+	var xr := XRServer.primary_interface
+	if xr is OpenXRInterface:
+		hz = (xr as OpenXRInterface).display_refresh_rate
+	if hz > 0.0 and dt > 1.5 / hz:
+		_stat_slow += 1
 	if _stat_time >= 5.0:
-		print("Stream: %.1f fps" % (_stat_frames / _stat_time))
+		print("Stream: %.1f fps; render %.0f fps, %d slow frames; upload avg %.1f ms, max %.1f ms" % [
+			_stat_frames / _stat_time, _stat_renders / _stat_time, _stat_slow,
+			_stat_upload_us / 1000.0 / maxi(_stat_frames, 1), _stat_upload_max_us / 1000.0])
 		_stat_time = 0.0
 		_stat_frames = 0
+		_stat_renders = 0
+		_stat_slow = 0
+		_stat_upload_us = 0
+		_stat_upload_max_us = 0
 	if img == null:
 		return
 	_stat_frames += 1
+	var t0 := Time.get_ticks_usec()
 	var new_aspect := (img.get_width() * 0.5) / float(img.get_height())
 	if _texture == null or _texture.get_size() != Vector2(img.get_size()):
 		_texture = ImageTexture.create_from_image(img)
@@ -895,6 +914,9 @@ func _poll_frame() -> void:
 		_update_screen()
 	else:
 		_texture.update(img)
+	var up := Time.get_ticks_usec() - t0
+	_stat_upload_us += up
+	_stat_upload_max_us = maxi(_stat_upload_max_us, up)
 	if _first_frame:
 		_first_frame = false
 		print("First frame %dx%d" % [img.get_width(), img.get_height()])
@@ -993,6 +1015,10 @@ func _decode_loop() -> void:
 		var img := Image.new()
 		if img.load_jpg_from_buffer(jpeg) != OK:
 			continue
+		# RGBA here, off the main thread: GPUs have no 3-byte texture format, so the renderer would
+		# otherwise convert RGB to RGBA on the main thread in every upload (~13 ms at 3844x1080,
+		# longer than a 120 Hz headset frame: SteamVR then reprojects and moving content warps).
+		img.convert(Image.FORMAT_RGBA8)
 		img.generate_mipmaps()  # sampled with trilinear + anisotropic filtering (sbs_screen.gdshader)
 		_mutex.lock()
 		if seq > _latest_seq:  # a slower thread must not overwrite a newer frame
