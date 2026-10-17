@@ -127,7 +127,7 @@ if ($env:VN3D_LAUNCHER_TEST) {
 # ---- window ----
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "DeepScreen - games and videos in 3D"
-$form.Size = New-Object System.Drawing.Size(560, 580)
+$form.Size = New-Object System.Drawing.Size(560, 614)
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 11)
 
@@ -285,12 +285,34 @@ $depthModel.Size = New-Object System.Drawing.Size(220, 28)
 $depthModel.SelectedItem = if ($saved -and $depthModel.Items -contains $saved.depth_model) { $saved.depth_model } else { "Image (fast)" }
 $form.Controls.Add($depthModel)
 
+# 3D speed: iw3 shares the GPU with VR, so at full detail it makes ~34 3D frames/s from a 60 fps
+# animation. Lower depth input (392) and the symmetric warp model each cut ~35% of the time
+# (tests/compare_warp.py at 1080p: 37.8 / 25.8 / 18.2 ms) for slightly softer depth edges.
+$speedLabel = New-Object System.Windows.Forms.Label
+$speedLabel.Text = "3D speed:"
+$speedLabel.Location = New-Object System.Drawing.Point(16, 496)
+$speedLabel.AutoSize = $true
+$form.Controls.Add($speedLabel)
+$speed = New-Object System.Windows.Forms.ComboBox
+$speed.DropDownStyle = "DropDownList"
+$speeds = [ordered]@{
+    "Detail"                 = @("-DepthResolution", 518, "-Method", "row_flow_v3")
+    "Balanced"               = @("-DepthResolution", 518, "-Method", "row_flow_v3_sym")
+    "Smooth (animations)"    = @("-DepthResolution", 392, "-Method", "row_flow_v3_sym")
+}
+[void]$speed.Items.AddRange(@($speeds.Keys))
+$speed.Location = New-Object System.Drawing.Point(80, 492)
+$speed.Size = New-Object System.Drawing.Size(220, 28)
+$speed.SelectedItem = if ($saved -and $speed.Items -contains $saved.speed) { $saved.speed } else { "Detail" }
+$form.Controls.Add($speed)
+
 function Save-LauncherSettings {
-    try { @{ video_size = $videoSize.SelectedItem; game_size = $gameSize.SelectedItem; depth_model = $depthModel.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
+    try { @{ video_size = $videoSize.SelectedItem; game_size = $gameSize.SelectedItem; depth_model = $depthModel.SelectedItem; speed = $speed.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
 }
 $videoSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
 $gameSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
 $depthModel.Add_SelectedIndexChanged({ Save-LauncherSettings })
+$speed.Add_SelectedIndexChanged({ Save-LauncherSettings })
 
 function Prepare-VR {
     # ComfyUI fills the GPU and makes VR stutter or crash; offer to close it.
@@ -361,11 +383,12 @@ function Start-3D([string]$title, [string]$key, $div, $shape, [bool]$media, [str
     if ($vlcPass) { $a += @("-VlcPass", $vlcPass) }
     if ($streamHeight -ne 1080) { $a += @("-StreamHeight", $streamHeight) }
     $a += @("-DepthModel", $depthModels["$($depthModel.SelectedItem)"])
+    $a += $speeds["$($speed.SelectedItem)"]
     Start-Process powershell -ArgumentList $a
 }
 
 $status = New-Object System.Windows.Forms.Label
-$status.Location = New-Object System.Drawing.Point(16, 496)
+$status.Location = New-Object System.Drawing.Point(16, 530)
 $status.Size = New-Object System.Drawing.Size(510, 24)
 $form.Controls.Add($status)
 
