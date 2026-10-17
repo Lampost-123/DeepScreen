@@ -66,11 +66,20 @@ function Save-Games($games) {
     ConvertTo-Json -InputObject @($games) -Depth 3 | Set-Content -Path $listFile -Encoding UTF8
 }
 
+function Get-GameProcess([string]$dir) {
+    return Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+}
+
 function Wait-GameWindow([string]$dir, [int]$seconds) {
+    # A starting Ren'Py game first titles its window with its script path ("...\game.py"),
+    # then renames it to the game's name: wait for a title that isn't a path and stays put 2 s.
     $deadline = (Get-Date).AddSeconds($seconds)
+    $last = $null; $since = Get-Date
     while ((Get-Date) -lt $deadline) {
-        $p = Get-Process | Where-Object { $_.MainWindowTitle -and $_.Path -and $_.Path.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
-        if ($p) { return $p }
+        $p = Get-Process | Where-Object { $_.MainWindowTitle -and $_.MainWindowTitle -notmatch '^[A-Za-z]:\\|\.pyw?$' -and $_.Path -and $_.Path.StartsWith($dir, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+        if (-not $p) { $last = $null }
+        elseif ($p.MainWindowTitle -ne $last) { $last = $p.MainWindowTitle; $since = Get-Date }
+        elseif (((Get-Date) - $since).TotalSeconds -ge 2) { return $p }
         Start-Sleep -Milliseconds 500
         [System.Windows.Forms.Application]::DoEvents()
     }
@@ -395,12 +404,11 @@ $play.Add_Click({
     $play.Enabled = $false
     try {
         Prepare-VR
-        $proc = Wait-GameWindow $dir 0
-        if (-not $proc) {
+        if (-not (Get-GameProcess $dir)) {
             $status.Text = "Starting $($g.name)..."
             Start-Process -FilePath $g.exe -WorkingDirectory $dir
-            $proc = Wait-GameWindow $dir 90
         }
+        $proc = Wait-GameWindow $dir 90
         if (-not $proc) { $status.Text = "The game window didn't appear within 90 s."; return }
         if (-not (Set-Windowed $proc.MainWindowHandle)) {
             $r = [System.Windows.Forms.MessageBox]::Show("$($g.name) is fullscreen, and couldn't be switched to a window. Fullscreen makes the 3D picture freeze until you Alt-Tab.`n`nPress F in the game to switch to a window, then click OK. Or Cancel to stop.", "VN3D", "OKCancel")
@@ -411,6 +419,9 @@ $play.Add_Click({
             $streamH = [int](("$($gameSize.SelectedItem)" -split 'p')[0])
             $status.Text = "Resizing $($g.name) to ${streamH}p..."
             if (-not (Resize-GameWindow $proc.MainWindowTitle $streamH)) { $streamH = 1080 }
+            # Re-find the window: the 3D needs its current title, and the game may have closed.
+            $proc = Wait-GameWindow $dir 10
+            if (-not $proc) { $status.Text = "$($g.name) closed after resizing to ${streamH}p. Start it again, or set Game size to Keep."; return }
         }
         Start-3D $proc.MainWindowTitle $g.exe $strength.Value $shapeBox.Value $false "" $streamH
     }
