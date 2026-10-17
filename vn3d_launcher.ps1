@@ -261,11 +261,27 @@ $gameSize.Size = New-Object System.Drawing.Size(106, 28)
 $gameSize.SelectedItem = if ($saved -and $gameSize.Items -contains $saved.game_size) { $saved.game_size } else { "Keep" }
 $form.Controls.Add($gameSize)
 
+# Depth model: per-image (fast) or video model (frame-to-frame steady: less warping in animations).
+$depthLabel = New-Object System.Windows.Forms.Label
+$depthLabel.Text = "Depth:"
+$depthLabel.Location = New-Object System.Drawing.Point(16, 462)
+$depthLabel.AutoSize = $true
+$form.Controls.Add($depthLabel)
+$depthModel = New-Object System.Windows.Forms.ComboBox
+$depthModel.DropDownStyle = "DropDownList"
+$depthModels = [ordered]@{ "Image (fast)" = "Any_V2_S"; "Video (steady motion)" = "VDA_Stream_S" }
+[void]$depthModel.Items.AddRange(@($depthModels.Keys))
+$depthModel.Location = New-Object System.Drawing.Point(80, 458)
+$depthModel.Size = New-Object System.Drawing.Size(220, 28)
+$depthModel.SelectedItem = if ($saved -and $depthModel.Items -contains $saved.depth_model) { $saved.depth_model } else { "Image (fast)" }
+$form.Controls.Add($depthModel)
+
 function Save-LauncherSettings {
-    try { @{ video_size = $videoSize.SelectedItem; game_size = $gameSize.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
+    try { @{ video_size = $videoSize.SelectedItem; game_size = $gameSize.SelectedItem; depth_model = $depthModel.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
 }
 $videoSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
 $gameSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
+$depthModel.Add_SelectedIndexChanged({ Save-LauncherSettings })
 
 function Prepare-VR {
     # ComfyUI fills the GPU and makes VR stutter or crash; offer to close it.
@@ -335,6 +351,7 @@ function Start-3D([string]$title, [string]$key, $div, $shape, [bool]$media, [str
     if ($media) { $a += "-Media" }
     if ($vlcPass) { $a += @("-VlcPass", $vlcPass) }
     if ($streamHeight -ne 1080) { $a += @("-StreamHeight", $streamHeight) }
+    $a += @("-DepthModel", $depthModels["$($depthModel.SelectedItem)"])
     Start-Process powershell -ArgumentList $a
 }
 

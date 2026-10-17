@@ -17,6 +17,7 @@ param(
     [double]$Shape = 0.0,       # shape boost (rounder local shapes), 0-3; 0 = off
     [switch]$Media,             # video in VLC: trigger = play/pause, A/grip = jump back/forward
     [string]$VlcPass = "",      # VLC remote-control password (127.0.0.1:8190) for the viewer's seek bar
+    [string]$DepthModel = "Any_V2_S",  # Any_V2_S (per image, fast) or VDA_Stream_S (video model: steadier in motion, ~28 ms)
     [switch]$Layers
 )
 $ErrorActionPreference = "Stop"
@@ -70,7 +71,7 @@ try {
     Push-Location D:\nunif
     # iw3_fast.py = iw3.desktop with the depth model replayed via CUDA graphs (~2x faster).
     & $python "$PSScriptRoot\iw3_fast.py" --bind-addr 127.0.0.1 --window-name $Window --full-sbs `
-        --depth-model Any_V2_S --divergence $Divergence --stream-height $StreamHeight `
+        --depth-model $DepthModel --divergence $Divergence --stream-height $StreamHeight `
         --stream-fps $StreamFps @depthRes --stream-quality 90 --gpu-jpeg --screenshot wc_cuda --disable-draw-cursor --preserve-screen-border @crop --vn3d-shape $Shape
 }
 finally {
