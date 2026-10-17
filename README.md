@@ -116,11 +116,14 @@ generated clip), not personal media.
 
 ### Desktop launcher (stable copy)
 
-`D:\vn3d-stable\vn3d_launcher.ps1` (desktop shortcut "VN3D (Ren'Py in VR)"): pick a Ren'Py
+`D:\vn3d-stable\vn3d_launcher.ps1` (desktop shortcut "DeepScreen"): pick a Ren'Py
 game (Downloads is scanned automatically, or Add game), set strength and shape boost, Play.
 It starts SteamVR if needed, starts the game, switches a fullscreen Ren'Py game to a window
 (fullscreen games freeze window capture until Alt-Tab), waits for its title bar, then runs
-`vn3d_vr.ps1`.
+`vn3d_vr.ps1`. **Game size** (Keep / 720p / 1080p / 1440p / 2160p experimental, remembered):
+resizes the game window to that height at its own aspect ratio before the 3D starts, and the 3D
+stream uses the same height; Ren'Py and most engines render at the window size, so this is a
+sharper "upscale" than any filter.
 The viewer log (stream FPS, controller profiles) is in `...\VN3D Viewer\logs\godot.log`.
 
 ## Pieces

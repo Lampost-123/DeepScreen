@@ -118,7 +118,7 @@ if ($env:VN3D_LAUNCHER_TEST) {
 # ---- window ----
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "DeepScreen - games and videos in 3D"
-$form.Size = New-Object System.Drawing.Size(560, 540)
+$form.Size = New-Object System.Drawing.Size(560, 580)
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 11)
 
@@ -241,13 +241,31 @@ $videoSize.DropDownStyle = "DropDownList"
 $videoSize.Location = New-Object System.Drawing.Point(420, 424)
 $videoSize.Size = New-Object System.Drawing.Size(106, 28)
 $launcherFile = Join-Path $dataDir "launcher.json"
-$savedSize = "1080p"
-try { if (Test-Path $launcherFile) { $savedSize = (Get-Content $launcherFile -Raw | ConvertFrom-Json).video_size } } catch { }
-$videoSize.SelectedItem = if ($videoSize.Items -contains $savedSize) { $savedSize } else { "1080p" }
-$videoSize.Add_SelectedIndexChanged({
-    try { @{ video_size = $videoSize.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
-})
+$saved = $null
+try { if (Test-Path $launcherFile) { $saved = Get-Content $launcherFile -Raw | ConvertFrom-Json } } catch { }
+$videoSize.SelectedItem = if ($saved -and $videoSize.Items -contains $saved.video_size) { $saved.video_size } else { "1080p" }
 $form.Controls.Add($videoSize)
+
+# Game size: resize the game's window to this height (at its own shape) before the 3D starts.
+# Ren'Py and most engines then render at that size: sharper than upscaling. "Keep" = don't touch.
+$gameSizeLabel = New-Object System.Windows.Forms.Label
+$gameSizeLabel.Text = "Game size:"
+$gameSizeLabel.Location = New-Object System.Drawing.Point(330, 462)
+$gameSizeLabel.AutoSize = $true
+$form.Controls.Add($gameSizeLabel)
+$gameSize = New-Object System.Windows.Forms.ComboBox
+$gameSize.DropDownStyle = "DropDownList"
+[void]$gameSize.Items.AddRange(@("Keep", "720p", "1080p", "1440p", "2160p (exp.)"))
+$gameSize.Location = New-Object System.Drawing.Point(420, 458)
+$gameSize.Size = New-Object System.Drawing.Size(106, 28)
+$gameSize.SelectedItem = if ($saved -and $gameSize.Items -contains $saved.game_size) { $saved.game_size } else { "Keep" }
+$form.Controls.Add($gameSize)
+
+function Save-LauncherSettings {
+    try { @{ video_size = $videoSize.SelectedItem; game_size = $gameSize.SelectedItem } | ConvertTo-Json | Set-Content $launcherFile -Encoding UTF8 } catch { }
+}
+$videoSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
+$gameSize.Add_SelectedIndexChanged({ Save-LauncherSettings })
 
 function Prepare-VR {
     # ComfyUI fills the GPU and makes VR stutter or crash; offer to close it.
@@ -292,6 +310,22 @@ function Get-VlcVideoSize([string]$pass) {
     return $null
 }
 
+function Resize-GameWindow([string]$title, [int]$h) {
+    # Keep the game's own shape: read its current inner size, then set the height to $h.
+    $py = "D:\nunif\venv\Scripts\python.exe"
+    $info = (& $py -I "$here\window_crop.py" $title 2>&1 | Out-String)
+    if ($info -notmatch 'client (\d+)x(\d+)') { return $false }
+    $cw = [int]$Matches[1]; $ch = [int]$Matches[2]
+    if ($cw -le 0 -or $ch -le 0) { return $false }
+    $w = [int]([math]::Round($h * $cw / $ch / 2) * 2)
+    $resizeArgs = @("-I", "$here\window_crop.py", $title, "--resize-client", "${w}x${h}")
+    # As tall as a 4K monitor: title bar off-screen so it stays a normal window (see Watch video).
+    if ($h -ge 2160) { $resizeArgs += "--frame-offscreen" }
+    & $py @resizeArgs 2>&1 | Out-Null
+    Start-Sleep -Milliseconds 800  # let the game re-layout at the new size before capture starts
+    return $true
+}
+
 function Start-3D([string]$title, [string]$key, $div, $shape, [bool]$media, [string]$vlcPass = "", [int]$streamHeight = 1080) {
     $status.Text = "3D starting for '$title': picture appears in the headset in a few minutes."
     # -NoExit keeps the console open after the 3D view stops, so errors stay readable.
@@ -305,7 +339,7 @@ function Start-3D([string]$title, [string]$key, $div, $shape, [bool]$media, [str
 }
 
 $status = New-Object System.Windows.Forms.Label
-$status.Location = New-Object System.Drawing.Point(16, 458)
+$status.Location = New-Object System.Drawing.Point(16, 496)
 $status.Size = New-Object System.Drawing.Size(510, 24)
 $form.Controls.Add($status)
 
@@ -355,7 +389,13 @@ $play.Add_Click({
             $r = [System.Windows.Forms.MessageBox]::Show("$($g.name) is fullscreen, and couldn't be switched to a window. Fullscreen makes the 3D picture freeze until you Alt-Tab.`n`nPress F in the game to switch to a window, then click OK. Or Cancel to stop.", "VN3D", "OKCancel")
             if ($r -ne "OK") { $status.Text = "Stopped."; return }
         }
-        Start-3D $proc.MainWindowTitle $g.exe $strength.Value $shapeBox.Value $false
+        $streamH = 1080
+        if ("$($gameSize.SelectedItem)" -ne "Keep") {
+            $streamH = [int](("$($gameSize.SelectedItem)" -split 'p')[0])
+            $status.Text = "Resizing $($g.name) to ${streamH}p..."
+            if (-not (Resize-GameWindow $proc.MainWindowTitle $streamH)) { $streamH = 1080 }
+        }
+        Start-3D $proc.MainWindowTitle $g.exe $strength.Value $shapeBox.Value $false "" $streamH
     }
     finally {
         $play.Enabled = $true
