@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+# Godot cache
+.godot/
+# Test output and local backups
+tests/layer_dump/
+tests/profile_out.txt
+backup_*/
+tests/*.png
+tests/media/
